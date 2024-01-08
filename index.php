@@ -3,50 +3,50 @@
 
 header('Content-Type: text/html; charset=utf-8');
 
-$conn = mysqli_connect(
-    $hostname = ini_get("mysqli.default_host"),
-    $username = ini_get("mysqli.default_user"),
-    $password = ini_get("mysqli.default_pw"),
-    $database = "speedstats",
-    $port = ini_get("mysqli.default_port"),
-    $socket = ini_get("mysqli.default_socket")
-);
+mb_internal_encoding('UTF-8');
 
+$hostname = "localhost";
+$username = "root";
+$password = "";
+$database = "SpeedStats";
 
-$result = mysqli_query($conn, "select * from runs limit 100");
-
-
-/*
-while($row = mysqli_fetch_assoc($result)) {
-    print_r($row);
+$conn = mysqli_connect($hostname, $username, $password, $database);
+mysqli_set_charset($conn, "utf8");
+if (!$conn) {
+    die("Connection failed: " . mysqli_connect_error());
 }
-*/
 
 print <<<EOF
 
-<p>Last Updated: 7/12/2022</p>
-
+<head>
+    <title>SpeedStats</title>
+    <link rel="stylesheet" type="text/css" href="style.css?v=1">
+</head>
 
 <form action=index.php>
-
-
-
-<p>
+<div class="grid-container">
+<div>
+<label for="series">Series:</label>
+<textarea name=series></textarea>
+</div>
+<div>
 <label for="games">Games:</label>
 <textarea name=games></textarea>
-
-<label for="platforms">+ Platforms:</label>
+</div>
+<div>
+<label for="platforms">Platforms:</label>
 <textarea name=platforms></textarea>
-</p>
-
-<p>
+</div>
+<div>
 <label for="players">Players:</label>
 <textarea name=players></textarea>
-</p>
+</div>
+</div>
 
-<p>Separate each value in the input fields with a comma followed by a space. 
-The specified games and platforms combine, rather than constricting eachother. 
-Leave game / platform fields blank to request for all games.</p>
+<p>
+Separate each value in the input fields with a comma followed by a space. 
+The specified series, games, and platforms combine, rather than constricting eachother. 
+Leave those fields blank to request for all games. <a href="https://www.desmos.com/calculator/bm0shjznnx">How Run Value is Calculated</a></p>
 
 <label for="request-type">Request Type:</label>
 <select name="request-type" id="request-type">
@@ -57,7 +57,10 @@ Leave game / platform fields blank to request for all games.</p>
   <option value="games">Game Value</option>
   <option value="dates"> Date Value</option>
 </select>
+<div class="center">
 <input type="submit" value="Submit">
+</div>
+<p align="center">Created by: <a href="https://www.speedrun.com/users/Maximum">Maximum</a></p>
 </form>
 
 
@@ -85,24 +88,32 @@ function printSQL($results) {
     echo "</table>";
 }
 
+// default query
+$sql = (
+    "select *
+    from playerRanks
+    order by Points desc
+    limit 1000;"
+);
+$parameters = [];
+
 if(isset($_REQUEST['request-type'])) {
 
     $requestType = $_REQUEST['request-type'];
 
-    //$seriesin = "\"\"";
+    $seriesin = "\"\"";
     $gamesin = "\"\"";
     $platformsin = "\"\"";
-    $playersin = "playerName";
+    $playersin = "Player";
 
-    $parameters = [];
+    $playersarray = [];
 
-    /*
-    if(isset($_REQUEST['series'])) {
+    if(isset($_REQUEST['series']) && !empty($_REQUEST['series'])) {
         $series = $_REQUEST['series'];
         $seriesarray = explode(", ", $series);
         $seriesin = str_repeat('?,', count($seriesarray) - 1) . '?';
+        $parameters = array_merge($parameters,$seriesarray);
     }
-    */
 
     if(isset($_REQUEST['games']) && !empty($_REQUEST['games'])) {
         $games = $_REQUEST['games'];
@@ -127,19 +138,17 @@ if(isset($_REQUEST['request-type'])) {
         $parameters = array_merge($parameters,$playersarray); 
     }
 
-    if($gamesin == "\"\"" && $platformsin == "\"\"") {
-        $gamesin = "gameName"; //get all games if no games / platforms are specified
+    if($seriesin == "\"\"" && $gamesin == "\"\"" && $platformsin == "\"\"") {
+        $gamesin = "Game"; //get all games if no games / platforms are specified
     }
-
-    $sql = "";
 
     switch($requestType) {
         case "pr":
-            if($gamesin == "gameName") { //use playerranks for all games table
+            if($gamesin == "Game") { //use playerRanks for all games table
                 $sql = (
                     "select *
-                    from playerranks
-                    where playerName in ($playersin) 
+                    from playerRanks
+                    where Player in ($playersin) 
                     order by Points desc
                     limit 1000;"
                 );
@@ -147,10 +156,10 @@ if(isset($_REQUEST['request-type'])) {
                 $sql = (
                     "select ROW_NUMBER() over (order by Points desc) as 'Rank', t1.*
                     from(
-                    select playerName, sum(runValue) as Points
+                    select Player, round(sum(Value), 2) as Points
                     from runs
-                    where (gameName in ($gamesin) or platformName in ($platformsin)) and playerName in ($playersin) 
-                    group by playerName 
+                    where (Series in ($seriesin) or Game in ($gamesin) or Platform in ($platformsin)) and Player in ($playersin) 
+                    group by Player
                     order by Points desc
                     limit 1000
                     ) as t1;"
@@ -160,23 +169,23 @@ if(isset($_REQUEST['request-type'])) {
         case "runs":
             if(count($playersarray) == 1) {
                 $sql = (
-                    "select ROW_NUMBER() over (order by runValue desc) as 'Rank', t1.*
+                    "select ROW_NUMBER() over (order by Value desc) as 'Rank', t1.*
                     from(
-                    select crlName, runPlace, runValue
+                    select Leaderboard, Place, Value
                     from runs
-                    where (gameName in ($gamesin) or platformName in ($platformsin)) and playerName in ($playersin) 
-                    order by runValue desc
+                    where (Series in ($seriesin) or Game in ($gamesin) or Platform in ($platformsin)) and Player in ($playersin) 
+                    order by Value desc
                     limit 1000
                     ) as t1;"
                 );
             } else {
                 $sql = (
-                    "select ROW_NUMBER() over (order by runValue desc) as 'Rank', t1.*
+                    "select ROW_NUMBER() over (order by Value desc) as 'Rank', t1.*
                     from(
-                    select playerName, crlName, runPlace, runValue
+                    select Player, Leaderboard, Place, Value
                     from runs
-                    where (gameName in ($gamesin) or platformName in ($platformsin)) and playerName in ($playersin) 
-                    order by runValue desc
+                    where (Series in ($seriesin) or Game in ($gamesin) or Platform in ($platformsin)) and Player in ($playersin)
+                    order by Value desc
                     limit 1000
                     ) as t1;"
                 ); 
@@ -184,12 +193,13 @@ if(isset($_REQUEST['request-type'])) {
             break;
         case "records":
             $sql = (
-                "select ROW_NUMBER() over (order by runValue desc) as 'Rank', t1.*
+                "select ROW_NUMBER() over (order by Value desc) as 'Rank', t1.*
                 from(
-                select crlName, runValue
+                select Leaderboard, Player, max(Value) as Value
                 from runs
-                where runPlace = 1 and (gameName in ($gamesin) or platformName in ($platformsin)) and playerName in ($playersin) 
-                order by runValue desc
+                where (Series in ($seriesin) or Game in ($gamesin) or Platform in ($platformsin)) and Player in ($playersin)
+                group by Leaderboard
+                order by Value desc
                 limit 1000
                 ) as t1;"
             );
@@ -198,10 +208,10 @@ if(isset($_REQUEST['request-type'])) {
             $sql = (
                 "select ROW_NUMBER() over (order by Points desc) as 'Rank', t1.*
                 from(
-                select crlName, sum(runValue) as Points
+                select Leaderboard, round(sum(Value), 2) as Points
                 from runs
-                where (gameName in ($gamesin) or platformName in ($platformsin)) and playerName in ($playersin) 
-                group by crlName
+                where (Series in ($seriesin) or Game in ($gamesin) or Platform in ($platformsin)) and Player in ($playersin)
+                group by Leaderboard
                 order by Points desc
                 limit 1000
                 ) as t1;"
@@ -211,10 +221,10 @@ if(isset($_REQUEST['request-type'])) {
             $sql = (
                 "select ROW_NUMBER() over (order by Points desc) as 'Rank', t1.*
                 from(
-                select gameName, sum(runValue) as Points
+                select Game, round(sum(Value), 2) as Points
                 from runs
-                where (gameName in ($gamesin) or platformName in ($platformsin)) and playerName in ($playersin) 
-                group by gameName
+                where (Series in ($seriesin) or Game in ($gamesin) or Platform in ($platformsin)) and Player in ($playersin) 
+                group by Game
                 order by Points desc
                 limit 1000
                 ) as t1;"
@@ -224,10 +234,10 @@ if(isset($_REQUEST['request-type'])) {
             $sql = (
                 "select ROW_NUMBER() over (order by Points desc) as 'Rank', t1.*
                 from(
-                select date, sum(runValue) as Points
+                select Date, round(sum(Value), 2) as Points
                 from runs
-                where (gameName in ($gamesin) or platformName in ($platformsin)) and playerName in ($playersin) 
-                group by date
+                where (Series in ($seriesin) or Game in ($gamesin) or Platform in ($platformsin)) and Player in ($playersin)
+                group by Date
                 order by Points desc
                 limit 1000
                 ) as t1;"
@@ -235,41 +245,23 @@ if(isset($_REQUEST['request-type'])) {
             break;
         default:
             $sql = ("select * from runs
-                where (gameName in ($gamesin) or platformName in ($platformsin)) and playerName in ($playersin)
+                where (Series in ($seriesin) or Game in ($gamesin) or Platform in ($platformsin)) and Player in ($playersin)
                 limit 0;"
             );
     }
-
-    $stmt  = $conn->prepare($sql);
-    if(count($parameters) > 0) {
-        $types = str_repeat('s', count($parameters));
-        $stmt->bind_param($types, ...$parameters);
-    }
-    $stmt->execute();
-    $result = $stmt->get_result();
-
-
-    printSQL($result);
-    /*
-    print "<table border=1>";
-
-    
-    
-    while($row = mysqli_fetch_assoc($result)) {
-        $rank = $row['Rank'];
-        $playerName = htmlspecialchars($row['playerName']);
-        $points = $row['Points'];
-        print <<<EOF
-        <tr><td>$rank</td><td>$playerName</td><td>$points</td>
-            
-        
-        
-        </tr>
-        EOF;
-    }
-    print "</table>";
-    */
-
 }
 
+if (!$stmt = $conn->prepare($sql)) {
+    die("Prepare failed: " . $conn->error);
+}
+
+if(count($parameters) > 0) {
+    $types = str_repeat('s', count($parameters));
+    $stmt->bind_param($types, ...$parameters);
+}
+
+$stmt->execute();
+$result = $stmt->get_result();
+
+printSQL($result);
 ?>
