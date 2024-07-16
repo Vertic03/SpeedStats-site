@@ -46,7 +46,7 @@ print <<<EOF
 <p>
 Separate each value in the input fields with a comma followed by a space. 
 The specified series, games, and platforms combine, rather than constricting eachother. 
-Leave those fields blank to request for all games. <a href="https://www.desmos.com/calculator/bm0shjznnx">How Run Value is Calculated</a></p>
+Leave those fields blank to request for all games. <a href="https://www.desmos.com/calculator/pgqe6xtibj">How Run Value is Calculated</a></p>
 
 <label for="request-type">Request Type:</label>
 <select name="request-type" id="request-type">
